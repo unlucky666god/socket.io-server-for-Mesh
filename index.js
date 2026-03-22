@@ -12,11 +12,13 @@ const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: "http://localhost:3000", // Адрес вашего фронтенда
+    origin: process.env.ORIGIN_HOST || "*", // Адрес вашего фронтенда
     methods: ["GET", "POST"],
     allowedHeaders: ["my-custom-header"], // Можно добавить кастомные заголовки, если нужно
     credentials: true
-  }
+  },
+  pingTimeout: 60000,
+  pingInterval: 25000
 });
 
 io.use((socket, next) => {

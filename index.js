@@ -42,7 +42,7 @@ io.on("connection", async (socket) => {
 
   try {
     await query(
-      'UPDATE "User" SET status = $1 WHERE id = $2',
+      'UPDATE "users" SET status = $1 WHERE id = $2',
       ['online', userId]
     );
   } catch (err) {
@@ -89,7 +89,7 @@ io.on("connection", async (socket) => {
     try {
       // Используйте то же имя таблицы, что и выше (users или "User")
       await query(
-        'UPDATE "User" SET status = $1 WHERE id = $2',
+        'UPDATE "users" SET status = $1 WHERE id = $2',
         ['offline', userId]
       );
     } catch (err) {

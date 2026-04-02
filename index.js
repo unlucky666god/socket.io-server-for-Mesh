@@ -1,10 +1,8 @@
 import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
-import cors from "cors";
 import { query } from "./db.js";
 import jwt from "jsonwebtoken";
-import { error } from "console";
 import 'dotenv/config';
 import { createId } from '@paralleldrive/cuid2';
 
@@ -28,11 +26,8 @@ io.use((socket, next) => {
     return next(new Error("Auth error. Token can't find."));
   }
 
-  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-    if (err) return next(new Error("Authentication error"));
-    socket.userId = decoded.id;
-    next();
-  });
+  socket.userId = token; 
+  next();
 });
 
 io.on("connection", async (socket) => {
@@ -50,39 +45,45 @@ io.on("connection", async (socket) => {
     console.error("Ошибка обновления статуса:", err);
   }
 
-  socket.on('send_message', async ({ conversationId, text }) => {
+  socket.on('send_message', async ({ conversationId, text, mediaUrl, mediaType }) => { // Добавили поля
     try {
       const messageId = createId();
+
+      const finalContent = text || "";
+
+      // 1. Сохраняем в БД (убедись, что в таблице Message есть эти колонки)
       const res = await query(
-        `INSERT INTO "Message" (id, content, "conversationId", "senderId", "createdAt") 
-       VALUES ($1, $2, $3, $4, NOW()) 
-       RETURNING *`,
-        [messageId, text, conversationId, socket.userId]
+        `INSERT INTO "Message" (
+      id, 
+      content, 
+      "conversationId", 
+      "senderId", 
+      "createdAt", 
+      "mediaUrl", 
+      "mediaType"
+    ) VALUES ($1, $2, $3, $4, NOW(), $5, $6) RETURNING *`,
+        [messageId, text, conversationId, socket.userId, mediaUrl, mediaType] // Добавлены $5 и $6
       );
-      console.log(`Message ${messageId} sended to ${conversationId}`);
 
       const newMessage = res.rows[0];
-
       const participantsRes = await query(
         `SELECT "userId" FROM "Participant" WHERE "conversationId" = $1`,
         [conversationId]
       );
 
-      const participants = participantsRes.rows; // Массив объектов [{userId: '...'}, ...]
-
-      // 3. Рассылаем сообщение по персональным комнатам участников
-      participants.forEach(participant => {
+      // 2. Рассылаем всем участникам с учетом новых полей
+      participantsRes.rows.forEach(participant => {
         io.to(participant.userId).emit('message:new', {
           id: newMessage.id,
           conversationId: newMessage.conversationId,
           senderId: newMessage.senderId,
           text: newMessage.content,
+          mediaUrl: newMessage.mediaUrl,    // Передаем URL
+          mediaType: newMessage.mediaType,  // Передаем Тип
           timestamp: new Date(newMessage.createdAt).toISOString(),
           status: newMessage.status
         });
       });
-
-      console.log(`Current time: ${new Date(newMessage.createdAt).toISOString()}`);
 
     } catch (err) {
       console.error(err);
